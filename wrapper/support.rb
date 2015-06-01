@@ -542,10 +542,8 @@ module TestRailReporterWrapper
     def initialize(file_name)
       begin
         @file = File.read(file_name)
-      rescue Errno::ENOENT
-        raise SupportError.new('File not found')
-      ensure
-        @file.close
+      rescue Exception => e
+        raise SupportError.new(e)
       end
     end
 
