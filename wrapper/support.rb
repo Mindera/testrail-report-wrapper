@@ -385,7 +385,7 @@ module TestRailReporterWrapper
       plan_id = nil
 
       begin
-      plans = @client.send_get("get_plans/#{@project_id}&is_completed=0&milestone_id=#{milestone_id}")
+        plans = @client.send_get("get_plans/#{@project_id}&is_completed=0&milestone_id=#{milestone_id}")
       rescue TestRail::APIError => e
         raise SupportError.new(e.to_s)
       end
@@ -417,7 +417,7 @@ module TestRailReporterWrapper
       #  entry.delete_if{|build| build.has_value?(build_name)}
       #end
 
-      @mem_plan_info['entries'].delete_if{|build| build.has_value?(build_name)}
+      @mem_plan_info['entries'].delete_if { |build| build.has_value?(build_name) }
     end
 
     def _add_run_id_to_runs_results(entry_info)
@@ -464,7 +464,7 @@ module TestRailReporterWrapper
         raise SupportError.new('More than one milestone active!')
       end
 
-      return active_milestones[0]['id'] , active_milestones[0]['name']
+      return active_milestones[0]['id'], active_milestones[0]['name']
     end
 
     def _create_test_plan(name, milestone_id)
@@ -571,44 +571,46 @@ module TestRailReporterWrapper
       scenario_outline_number = 0
 
       begin
-        results = JSON.parse(@file)
+        results = JSON.parse(@file) if @file && @file.length >= 2
       rescue JSON::ParserError
         raise SupportError.new('Error parsing file')
       end
 
       test_results = Hash.new
-      results.each do |feature_results|
-        if feature_results.has_key?('elements')
-          feature_results['elements'].each do |scenarios|
-            if !scenarios['type'].eql?('background')
-              case_steps = []
-              status = nil
-              scenario_name = scenarios['name']
+      if !results.nil?
+        results.each do |feature_results|
+          if feature_results.has_key?('elements')
+            feature_results['elements'].each do |scenarios|
+              if !scenarios['type'].eql?('background')
+                case_steps = []
+                status = nil
+                scenario_name = scenarios['name']
 
-              if scenarios['type'].eql?('scenario_outline')
-                if !previous_scenario_name.eql?(scenario_name)
-                  scenario_outline_number = 0
-                end
-                previous_scenario_name = scenario_name
-                scenario_outline_number += 1
-                scenario_name = scenario_name + " \##{scenario_outline_number}"
-              end
-
-              #get scenario result
-              if scenarios.has_key?('steps')
-                scenarios['steps'].each do |steps|
-                  status = steps['result']['status']
-                  case_steps << "**#{steps['keyword']}** #{steps['name']}"
-                  if !status.eql?(CUCUMBER_SUCCESS)
-                    break
+                if scenarios['type'].eql?('scenario_outline')
+                  if !previous_scenario_name.eql?(scenario_name)
+                    scenario_outline_number = 0
                   end
+                  previous_scenario_name = scenario_name
+                  scenario_outline_number += 1
+                  scenario_name = scenario_name + " \##{scenario_outline_number}"
                 end
-                test_info = Hash.new
-                test_info[:feature_name] = feature_results['name']
-                test_info[:steps] = case_steps
-                test_info[:status] = status
+
+                #get scenario result
+                if scenarios.has_key?('steps')
+                  scenarios['steps'].each do |steps|
+                    status = steps['result']['status']
+                    case_steps << "**#{steps['keyword']}** #{steps['name']}"
+                    if !status.eql?(CUCUMBER_SUCCESS)
+                      break
+                    end
+                  end
+                  test_info = Hash.new
+                  test_info[:feature_name] = feature_results['name']
+                  test_info[:steps] = case_steps
+                  test_info[:status] = status
+                end
+                test_results[scenario_name] = test_info
               end
-              test_results[scenario_name] = test_info
             end
           end
         end
