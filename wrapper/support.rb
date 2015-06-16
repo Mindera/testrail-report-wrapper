@@ -620,6 +620,9 @@ module TestRailReporterWrapper
 
     def self.merge_results(original_results, results_to_merge)
       results_to_merge.each do |test_name, test_info|
+        unless original_results.has_key?(test_name)
+          original_results[test_name] = Hash.new
+        end
         original_results[test_name][:status] = test_info[:status]
       end
       original_results
