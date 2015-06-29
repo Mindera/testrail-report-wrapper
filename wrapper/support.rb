@@ -10,6 +10,9 @@ module TestRailReporterWrapper
     def initialize(test_plan_name, project_name = TR_PROJECT_NAME)
       @logger = Logger.new(STDOUT)
       @logger.level = Logger::INFO
+      @logger.formatter = proc do |severity, datetime, progname, msg|
+        "[#{datetime.strftime("%H:%M:%S")}] #{severity}: #{msg}\n"
+      end
 
       @client = TestRail::APIClient.new(TR_CLIENT)
       @client.user = TR_USER
