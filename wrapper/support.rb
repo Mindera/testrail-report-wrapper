@@ -2,7 +2,7 @@ require_relative 'testrail.rb'
 require_relative 'properties.rb'
 require 'json'
 require 'logger'
-
+require 'rexml/document'
 module TestRailReporterWrapper
 
   class ReporterWrapper
@@ -108,7 +108,6 @@ module TestRailReporterWrapper
         results.each do |test_name, test_info|
           case_info = _get_case_id(test_name)
           if case_info.nil?
-            @logger.info("Adding case \"#{test_name}\"...")
             test_id = add_case(test_name, test_info[:feature_name], test_info[:steps])
           else
             test_id = case_info['id']
@@ -178,6 +177,7 @@ module TestRailReporterWrapper
     end
 
     def set_results
+      @logger.info('Setting test results...')
       @mem_runs_results.each do |run_config_id, run_result|
         tests = _get_tests(run_result[:run_id])
         _clear_test_results
@@ -209,6 +209,7 @@ module TestRailReporterWrapper
     end
 
     def add_case(title, section_name, case_steps)
+      @logger.info("Add test case \"#{title}\" in section \"#{section_name}\"")
       if !_section_exists?(section_name)
         _add_section(section_name)
         section_id = _get_section_id(section_name)
@@ -286,7 +287,7 @@ module TestRailReporterWrapper
       end
 
       if project_id.nil?
-        raise SupportError.new('Project not found')
+        raise SupportError.new("Project '#{project_name}' not found")
       end
       project_id
     end
@@ -441,7 +442,9 @@ module TestRailReporterWrapper
       case_props = Hash.new
       case_props['title'] = title
       case_props['type_id'] = TR_CASE_TYPES['AUTOMATED'.to_sym]
-      case_props['custom_steps'] = case_steps.join("\n")
+      unless case_steps.nil?
+        case_props['custom_steps'] = case_steps.join("\n")
+      end
 
       begin
         new_case = @client.send_post("add_case/#{section_id}", case_props)
@@ -540,24 +543,35 @@ module TestRailReporterWrapper
   end
 
   class Results
+    include REXML
     CUCUMBER_SUCCESS = 'passed'
 
-    def initialize(file_name)
+    def initialize(file_name, type=:junit)
+      @files = Array.new
       begin
-        @file = File.read(file_name)
-      rescue Exception => e
+        case type.to_sym
+          when :json
+            @files = [File.read(file_name)]
+          when :junit
+            Dir[file_name].each do |file|
+              @files << File.read(file)
+            end
+        end
+      rescue Errno::ENOENT => e
         raise SupportError.new(e)
       end
     end
 
     # Any parser must return the following hash:
     # {
+    #    "<scenario_name>" =>
     #    {
     #        :feature_name=>"<feature name A>",
     #        :steps=>["<step A>", "<step B>", "<step C>"],
     #        :status=>"<status>"
-    #    }
+    #    },
     #    ...
+    #    "<scenario_name>" =>
     #    {
     #       :feature_name=>"<feature name B>",
     #       :steps=>["<step A>", "<step B>", "<step C>"],
@@ -565,18 +579,41 @@ module TestRailReporterWrapper
     #    }
     # }
 
+    def junit_parse
+      test_results = Hash.new
+
+      @files.each do |file|
+        #xmldoc = Document.new(file)
+        #xmldoc = REXML::Document.new(file)
+        xmldoc = Document.new(file)
+
+        xmldoc.elements.each("testsuite/testcase") do |testcase|
+          scenario_name = testcase.attributes["name"]
+          feature_name = testcase.attributes["classname"]
+          test_info = Hash.new
+          test_info[:feature_name] = feature_name
+          test_info[:status] = 'PASSED'
+
+          testcase.elements.each("failure") do
+            test_info[:status] = 'FAILED'
+          end
+          test_results[scenario_name] = test_info
+        end
+      end
+      test_results
+    end
 
     # Please use the following project to have results in scenarios outlines:
     # https://gist.github.com/blt04/9866357
 
-    def cucumber_parse
+    def cucumber_json_parse
       previous_scenario_name = nil
       scenario_outline_number = 0
 
       begin
-        results = JSON.parse(@file) if @file && @file.length >= 2
-      rescue JSON::ParserError
-        raise SupportError.new('Error parsing file')
+        results = JSON.parse(@file[0]) if @file[0] && @file[0].length >= 2
+      rescue JSON::ParserError => e
+        raise SupportError.new("Error parsing file: #{e}")
       end
 
       test_results = Hash.new
