@@ -34,7 +34,6 @@ module TestRailReporterWrapper
       @milestone_id, milestone_name = _get_active_milestone
 
       #Create a test plan if he doesn't exist
-      test_plan_name = test_plan_name + " - #{milestone_name}"
       @test_plan_id = _get_test_plan_id(test_plan_name, @milestone_id)
       if @test_plan_id.nil?
         @test_plan_id = _create_test_plan(test_plan_name, @milestone_id)
